@@ -9,6 +9,8 @@ const IDB_SUCCESS_MESSAGE = 'Record saved successfully to IndexedDB.';
 const IDB_DELETE_MESSAGE = 'Record deleted successfully.';
 const IDB_CLEAR_ALL_MESSAGE = 'All records cleared successfully.';
 const IDB_ERROR_MESSAGE = 'Could not access IndexedDB. Check console for details.';
+// localStorage key for event metadata
+const EVENT_CONFIG_KEY = 'eventConfig';
 
 /**
  * Opens a connection to IndexedDB, creating the object store if necessary.
@@ -48,6 +50,7 @@ const addRecord = async (recordData) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
 
+    // Add timestamp to the record using Date.now()
     const recordObject = { ...recordData, timestamp: Date.now() };
 
     return new Promise((resolve, reject) => {
@@ -170,6 +173,76 @@ const getStatusBadges = (status) => {
 
 // --- View Components ---
 
+// Component for the Event Configuration Form
+const ConfigView = ({ eventConfig, handleConfigChange }) => {
+    const formatDateForInput = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        // Ensure date is valid and format as YYYY-MM-DD for input type="date"
+        if (isNaN(date)) return '';
+        return date.toISOString().split('T')[0];
+    };
+
+    return (
+        <div className="space-y-8 p-4 bg-indigo-50/50 rounded-xl">
+            <h2 className="text-2xl font-bold text-indigo-700 mb-4">
+                Configure Event Details
+            </h2>
+            <p className="text-gray-600 text-sm">
+                These details will be used as the title and context for the attendance records. They are saved locally in your browser.
+            </p>
+
+            {/* 1. Name of Activity */}
+            <div>
+                <label htmlFor="activityName" className="block text-lg font-medium text-gray-700 mb-1">
+                    Activity Name
+                </label>
+                <input
+                    id="activityName"
+                    name="activityName"
+                    type="text"
+                    value={eventConfig.activityName}
+                    onChange={handleConfigChange}
+                    placeholder="e.g., Regional Tech Summit"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition text-gray-900"
+                />
+            </div>
+
+            {/* 2. Venue */}
+            <div>
+                <label htmlFor="venue" className="block text-lg font-medium text-gray-700 mb-1">
+                    Venue
+                </label>
+                <input
+                    id="venue"
+                    name="venue"
+                    type="text"
+                    value={eventConfig.venue}
+                    onChange={handleConfigChange}
+                    placeholder="e.g., Grand Ballroom, City Hotel"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition text-gray-900"
+                />
+            </div>
+
+            {/* 3. Date */}
+            <div>
+                <label htmlFor="eventDate" className="block text-lg font-medium text-gray-700 mb-1">
+                    Date
+                </label>
+                <input
+                    id="eventDate"
+                    name="eventDate"
+                    type="date"
+                    value={formatDateForInput(eventConfig.eventDate)}
+                    onChange={handleConfigChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition text-gray-900"
+                />
+            </div>
+        </div>
+    );
+};
+
+
 // Component for the Form Input
 const FormView = ({ 
     formData, 
@@ -180,10 +253,22 @@ const FormView = ({
     signatureCaptured, 
     canvasRef, 
     handleClearSignature, 
-    message 
+    message,
+    eventConfig
 }) => {
+    // Determine the header text
+    const headerText = eventConfig.activityName || "Activity Attendance";
+    const subheaderText = eventConfig.venue && eventConfig.eventDate 
+        ? `${eventConfig.venue} on ${new Date(eventConfig.eventDate).toLocaleDateString()}` 
+        : "Please set up the event details in the 'Event Setup' tab.";
+
     return (
         <>
+            <div className="mb-6 pb-4 border-b border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-800">{headerText}</h2>
+                <p className={`text-md italic ${eventConfig.activityName ? 'text-indigo-600' : 'text-red-500'}`}>{subheaderText}</p>
+            </div>
+            
             <p className="text-sm text-gray-500 mb-6 text-justify">
                 <strong>DATA PRIVACY NOTICE:</strong> The data and information provided in this form are solely intended for the designated activity. Any use of this data for purposes other than those intended by the process owner constitutes a violation of the Data Privacy Act of 2023. By voluntarily providing this data and information, the Data Subject explicitly consents to its use by the office for its intended purpose. This includes, but is not limited to, documentation processes related to the activity and sharing on social media platforms for promotional or informational purposes. Your likeness in event photos may be used. You can withdraw consent by contacting us at <strong>region9basulta@dict.gov.ph</strong>
             </p>
@@ -369,12 +454,20 @@ const FormView = ({
 };
 
 // Component for the Records List
-const RecordsView = ({ storedRecords, isDBReady, handleDelete, handleClearAll, confirmClear, confirmDeleteId }) => (
+const RecordsView = ({ storedRecords, isDBReady, handleDelete, handleClearAll, confirmClear, confirmDeleteId, eventConfig }) => (
     <div className="mt-8">
+        <div className="mb-6 pb-4 border-b border-gray-200">
+            <h2 className="text-2xl font-bold text-gray-800">Attendance for {eventConfig.activityName || "Unconfigured Activity"}</h2>
+            <p className="text-md italic text-indigo-600">{eventConfig.venue && eventConfig.eventDate 
+                ? `${eventConfig.venue} on ${new Date(eventConfig.eventDate).toLocaleDateString()}` 
+                : "Event details are missing. Configure in 'Event Setup' tab."}
+            </p>
+        </div>
+        
         <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800">
+            <h3 className="text-xl font-bold text-gray-800">
                 Saved Records ({storedRecords.length})
-            </h2>
+            </h3>
             <button
                 onClick={handleClearAll}
                 disabled={!isDBReady || storedRecords.length === 0}
@@ -392,12 +485,22 @@ const RecordsView = ({ storedRecords, isDBReady, handleDelete, handleClearAll, c
             {isDBReady && storedRecords.length > 0 ? (
                 storedRecords.map((item) => {
                     const isPendingDelete = item.id === confirmDeleteId;
+                    
+                    // Format the timestamp for display
+                    const timestampString = item.timestamp 
+                        ? new Date(item.timestamp).toLocaleString() 
+                        : 'N/A (Timestamp missing)';
+                        
                     return (
                         <div key={item.id} className="p-4 bg-white border border-indigo-200 rounded-xl shadow-sm hover:shadow-md transition duration-150 relative">
                             <div className="flex justify-between items-start pr-10">
                                 <div className="flex flex-col">
                                     <span className="text-lg font-bold text-indigo-600">{item.completeName || "Missing Name"}</span>
                                     <span className="text-sm text-gray-600 italic">{item.designation || "N/A"} in {item.division || "N/A"}</span>
+                                    {/* Display Timestamp */}
+                                    <span className="text-xs text-gray-400 mt-1 font-mono">
+                                        Signed: {timestampString}
+                                    </span>
                                 </div>
                                 <span className="text-xs font-semibold px-2 py-1 bg-gray-200 text-gray-700 rounded-full">
                                     {item.sex || "N/A"}
@@ -467,15 +570,22 @@ const initialFormData = {
     signature: null, 
 };
 
+const initialEventConfig = {
+    activityName: '',
+    venue: '',
+    eventDate: new Date().toISOString().split('T')[0], // Default to today's date
+};
+
 const App = () => {
   const [formData, setFormData] = useState(initialFormData);
   const [storedRecords, setStoredRecords] = useState([]);
+  const [eventConfig, setEventConfig] = useState(initialEventConfig); // New state for config
   const [message, setMessage] = useState('');
   const [isDBReady, setIsDBReady] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null); // State for individual delete confirmation
-  // State for routing: 'form' or 'records'
-  const [currentPage, setCurrentPage] = useState('form'); 
+  // State for routing: 'setup', 'form', or 'records'
+  const [currentPage, setCurrentPage] = useState('setup'); 
   
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
@@ -498,12 +608,29 @@ const App = () => {
       setIsDBReady(false);
     }
   }, [message]);
-
-  // Run only once on mount to initialize DB and fetch data
+  
+  /**
+   * Loads event configuration from localStorage on mount.
+   */
   useEffect(() => {
+    const savedConfig = localStorage.getItem(EVENT_CONFIG_KEY);
+    if (savedConfig) {
+        try {
+            setEventConfig(JSON.parse(savedConfig));
+        } catch (e) {
+            console.error("Failed to parse event config from localStorage:", e);
+        }
+    } else {
+        // If nothing is saved, ensure the default date is a clean ISO string
+        setEventConfig(prev => ({ 
+            ...prev, 
+            eventDate: new Date().toISOString().split('T')[0] 
+        }));
+    }
     fetchRecords();
   }, [fetchRecords]);
-  
+
+
   // Timer to clear the bulk confirmation state
   useEffect(() => {
     if (confirmClear) {
@@ -535,12 +662,14 @@ const App = () => {
   }, [message]);
 
 
-  // --- Signature Drawing Logic (Kept mostly the same) ---
+  // --- Signature Drawing Logic ---
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    // Only initialize drawing listeners if we are on the form page
+    if (currentPage !== 'form' || !canvas) return;
 
     const setCanvasDimensions = () => {
+        // Use fixed dimensions for consistency in storage
         canvas.width = 400; 
         canvas.height = 150;
     };
@@ -564,6 +693,7 @@ const App = () => {
         const x = clientX - rect.left;
         const y = clientY - rect.top;
 
+        // Scale coordinates to match the canvas's internal resolution (400x150)
         return {
             x: x * (canvas.width / rect.width),
             y: y * (canvas.height / rect.height)
@@ -571,7 +701,7 @@ const App = () => {
     };
 
     const startDrawing = (e) => {
-        if (!isDBReady || currentPage !== 'form') return; // Only allow drawing on the form page
+        if (!isDBReady) return; 
         e.preventDefault();
         isDrawingRef.current = true;
         const { x, y } = getCoords(e);
@@ -609,6 +739,7 @@ const App = () => {
 
 
     return () => {
+        // Cleanup function runs when component unmounts or dependencies change
         canvas.removeEventListener('mousedown', startDrawing);
         canvas.removeEventListener('mousemove', draw);
         canvas.removeEventListener('mouseup', stopDrawing);
@@ -619,7 +750,8 @@ const App = () => {
         canvas.removeEventListener('touchend', stopDrawing);
         canvas.removeEventListener('touchcancel', stopDrawing);
     };
-  }, [isDBReady, currentPage]); // Dependency on currentPage ensures we don't draw on records page
+  }, [isDBReady, currentPage]); // Dependency on currentPage ensures listeners are correct
+
 
   // Clear signature function
   const handleClearSignature = () => {
@@ -631,7 +763,6 @@ const App = () => {
       }
   };
 
-
   /**
    * General handler for text and radio inputs.
    */
@@ -641,6 +772,18 @@ const App = () => {
     setConfirmClear(false); // Reset confirmation on any form interaction
     setConfirmDeleteId(null); // Reset individual confirmation
   };
+  
+  /**
+   * Handler for event configuration changes and saving to localStorage.
+   */
+  const handleConfigChange = (e) => {
+    const { name, value } = e.target;
+    const newConfig = { ...eventConfig, [name]: value };
+    setEventConfig(newConfig);
+    // Persist configuration to localStorage immediately
+    localStorage.setItem(EVENT_CONFIG_KEY, JSON.stringify(newConfig));
+  };
+
 
   /**
    * Handler for the status checkboxes.
@@ -695,7 +838,7 @@ const App = () => {
           signature: signatureData // Save the captured signature data URL
       };
       
-      await addRecord(newRecord);
+      await addRecord(newRecord); // This function now adds the timestamp
       
       setFormData(initialFormData); // Clear form data
       handleClearSignature(); // Clear the canvas after successful save
@@ -703,8 +846,6 @@ const App = () => {
       fetchRecords(); 
       setConfirmClear(false);
       setConfirmDeleteId(null); // Reset individual confirmation
-      // Optional: switch to records view after save
-      // setCurrentPage('records'); 
     } catch (error) {
       setMessage(error.message || IDB_ERROR_MESSAGE);
     }
@@ -770,6 +911,16 @@ const App = () => {
         {/* Navigation Tabs */}
         <div className="flex mb-6 border-b border-gray-200">
             <button
+                onClick={() => setCurrentPage('setup')}
+                className={`py-2 px-4 text-lg font-medium transition duration-150 ${
+                    currentPage === 'setup' 
+                        ? 'border-b-4 border-indigo-600 text-indigo-700' 
+                        : 'text-gray-500 hover:text-indigo-500'
+                }`}
+            >
+                Event Setup
+            </button>
+            <button
                 onClick={() => setCurrentPage('form')}
                 className={`py-2 px-4 text-lg font-medium transition duration-150 ${
                     currentPage === 'form' 
@@ -792,6 +943,13 @@ const App = () => {
         </div>
 
         {/* Conditional View Rendering */}
+        {currentPage === 'setup' && (
+            <ConfigView 
+                eventConfig={eventConfig}
+                handleConfigChange={handleConfigChange}
+            />
+        )}
+        
         {currentPage === 'form' && (
             <FormView 
                 formData={formData}
@@ -803,6 +961,7 @@ const App = () => {
                 canvasRef={canvasRef}
                 handleClearSignature={handleClearSignature}
                 message={message}
+                eventConfig={eventConfig} // Pass config to display header
             />
         )}
 
@@ -813,12 +972,13 @@ const App = () => {
                 handleDelete={handleDelete}
                 handleClearAll={handleClearAll}
                 confirmClear={confirmClear}
-                confirmDeleteId={confirmDeleteId} // Pass confirmation ID
+                confirmDeleteId={confirmDeleteId} 
+                eventConfig={eventConfig} // Pass config to display header
             />
         )}
 
         {/* Global Status Message for Records View */}
-        {currentPage === 'records' && message && (
+        {(currentPage === 'records' || currentPage === 'setup') && message && (
             <div className={`mt-6 p-3 rounded-lg text-sm font-medium ${message.includes('success') ? 'bg-green-100 text-green-700' : message.includes('SURE') || message.includes('confirm') ? 'bg-red-100 text-red-700 font-extrabold' : 'bg-red-100 text-red-700'}`}>
                 {message}
             </div>
